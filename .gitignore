@@ -1,0 +1,24 @@
+# 构建产物
+dist/
+release/
+*.exe
+*.pdb
+*.zip
+
+# 教程 PDF 是生成物：源码在 docs/tutorial.md，用 tools/make-pdf.py 重新生成，
+# 只作为 Release 附件分发，不进仓库
+docs/DeadBand使用教程.pdf
+docs/_tutorial_print.html
+
+# 本地调试
+*.user
+.vs/
+bin/
+obj/
+
+# 个人数据 / 本地备份（绝不能进仓库）
+_backup/
+
+# 系统垃圾
+Thumbs.db
+desktop.ini
