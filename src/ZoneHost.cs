@@ -59,6 +59,9 @@ namespace DeadBand
         /// </summary>
         public bool PreviewMode;
 
+        /// <summary>全局热键被按下时回调给 App。区带隐藏时窗口句柄仍在，消息照收。</summary>
+        public Action HotkeyPressed;
+
         private readonly Stopwatch clock = Stopwatch.StartNew();
         private readonly Timer tick;
         private Bitmap backbuffer;
@@ -340,6 +343,12 @@ namespace DeadBand
                         return;         // 吞掉，别再往下传
                     }
                 }
+            }
+
+            if (m.Msg == Hotkey.WM_HOTKEY && m.WParam.ToInt64() == Hotkey.Id)
+            {
+                if (HotkeyPressed != null) HotkeyPressed();
+                return;
             }
 
             if (m.Msg == WM_USER_CB)

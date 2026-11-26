@@ -60,11 +60,13 @@ namespace DeadBand
     /// 应用级选项（不分显示器，跟 profile 分开存）。
     /// hideplayersubtitle = 要不要把播放器自带的字幕藏起来
     /// onboarded          = 首次设置引导走过没有
+    /// hotkey             = 隐藏/恢复区带的全局热键，如 "Ctrl+Alt+H"；空 = 不用热键
     /// </summary>
     internal static class AppOptions
     {
         public static bool HidePlayerSubtitle = true;
         public static bool Onboarded;
+        public static string Hotkey = "Ctrl+Alt+H";
 
         private static string FilePath
         {
@@ -87,6 +89,7 @@ namespace DeadBand
                     string v = line.Substring(eq + 1).Trim().ToLowerInvariant();
                     if (k == "hideplayersubtitle") HidePlayerSubtitle = !(v == "0" || v == "false");
                     else if (k == "onboarded") Onboarded = !(v == "0" || v == "false");
+                    else if (k == "hotkey") Hotkey = v == "0" ? "" : lines[i].Substring(eq + 1).Trim();
                 }
             }
             catch { }
@@ -98,7 +101,8 @@ namespace DeadBand
             {
                 string text = "# DeadBand 应用级选项（不分显示器）\n" +
                               "hideplayersubtitle=" + (HidePlayerSubtitle ? "1" : "0") + "\n" +
-                              "onboarded=" + (Onboarded ? "1" : "0") + "\n";
+                              "onboarded=" + (Onboarded ? "1" : "0") + "\n" +
+                              "hotkey=" + (string.IsNullOrEmpty(Hotkey) ? "0" : Hotkey) + "\n";
                 System.IO.File.WriteAllText(FilePath, text, new UTF8Encoding(false));
             }
             catch { }

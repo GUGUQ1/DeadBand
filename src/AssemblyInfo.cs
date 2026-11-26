@@ -6,8 +6,8 @@ using System.Runtime.InteropServices;
 // 版本号只在这里改一处：package.ps1 会解析下面的 AssemblyVersion 来命名发布包，
 // 所以别再把版本号写到别的地方去。
 
-[assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
+[assembly: AssemblyVersion("1.1.0.0")]
+[assembly: AssemblyFileVersion("1.1.0.0")]
 
 [assembly: AssemblyTitle("DeadBand")]
 [assembly: AssemblyProduct("DeadBand")]

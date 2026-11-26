@@ -30,6 +30,10 @@ namespace DeadBand
         // 引导正在开着（防止托盘连点开出两个）
         private bool onboardingOpen;
 
+        // 用户用热键主动把区带收起来了。跟"显示器拔掉导致挂起"必须分开：
+        // 显示器插回来时 WatchDisplays 会自动恢复，那会把用户的隐藏状态冲掉。
+        private bool hiddenByUser;
+
         /// <summary>
         /// 托盘图标。优先用随 exe 分发的 deadband.ico，
         /// 找不到就退回系统默认 —— 图标丢了不该让程序起不来。
@@ -60,6 +64,8 @@ namespace DeadBand
         public App(bool startupMode, bool forceOnboarding)
         {
             AppOptions.Load();
+            // 把默认值落成文件：用户才能在 options.ini 里看到并直接改热键
+            AppOptions.Save();
 
             // exe 被搬到别的目录之后，HKCU 里的启动项会指向旧路径 —— 每次启动顺手修掉
             Autostart.SyncPath();
@@ -136,6 +142,10 @@ namespace DeadBand
             tray.DoubleClick += new EventHandler(delegate { OpenSettings(); });
 
             host.FormClosed += new FormClosedEventHandler(delegate { Quit(); });
+
+            // 全局热键挂在区带窗口上：它有消息泵，而且隐藏时句柄仍然存在
+            host.HotkeyPressed = new Action(ToggleZoneHidden);
+            ApplyHotkey();
 
             DumpDisplays();
             ResolveProfile();
@@ -225,6 +235,87 @@ namespace DeadBand
                 return false;
             }
             return true;
+        }
+
+        // ---------------- 热键：隐藏 / 恢复区带 ----------------
+        private bool IsTargetPresent()
+        {
+            string want = Win32.NormalizeMonitorId(activeMonitorId);
+            if (want.Length == 0) return false;
+            return PresentMonitorIds().Contains(want);
+        }
+
+        private void ToggleZoneHidden()
+        {
+            if (hiddenByUser) RestoreZoneByHotkey();
+            else HideZoneByHotkey();
+        }
+
+        private void HideZoneByHotkey()
+        {
+            hiddenByUser = true;
+            // Suspend 会注销 AppBar 并把预留区还给桌面，同时停掉音频采集线程
+            host.Suspend();
+            UpdateTrayText();
+            LogState("区带已隐藏（热键）");
+        }
+
+        private void RestoreZoneByHotkey()
+        {
+            hiddenByUser = false;
+            if (profile != null && IsTargetPresent())
+            {
+                host.Apply(profile);
+                host.Resume();
+            }
+            UpdateTrayText();
+            LogState(hiddenByUser ? "区带仍隐藏" : "区带已恢复（热键）");
+        }
+
+        private void UpdateTrayText()
+        {
+            try
+            {
+                string hk = AppOptions.Hotkey;
+                if (string.IsNullOrEmpty(hk)) hk = "热键未设置";
+                tray.Text = hiddenByUser
+                    ? ("DeadBand —— 区带已隐藏（" + hk + " 恢复）")
+                    : "DeadBand —— 坏屏信息区";
+            }
+            catch { }
+            if (tray != null) { try { tray.Visible = true; } catch { } }
+        }
+
+        /// <summary>（重新）注册热键。改设置之后要调这个。</summary>
+        private void ApplyHotkey()
+        {
+            try
+            {
+                IntPtr h = host.Handle;          // 访问 Handle 会强制创建窗口
+                Hotkey.Unregister(h);
+
+                string spec = AppOptions.Hotkey;
+                if (string.IsNullOrEmpty(spec))
+                {
+                    LogState("隐藏区带热键：未设置");
+                    return;
+                }
+                if (!Hotkey.Register(h, spec))
+                {
+                    LogState("隐藏区带热键注册失败：" + spec);
+                    try
+                    {
+                        tray.ShowBalloonTip(7000, "DeadBand",
+                            "热键 " + spec + " 注册失败（可能被别的程序占用了）。\n" +
+                            "在 设置 → 外观与其他 里可以换一个组合键。",
+                            ToolTipIcon.Warning);
+                    }
+                    catch { }
+                    return;
+                }
+                LogState("隐藏区带热键：" + spec);
+            }
+            catch { }
         }
 
         // ---------------- 状态日志 ----------------
@@ -323,7 +414,8 @@ namespace DeadBand
                     CaptionFeed.Override = on ? "这是一行示例字幕，用来预览叠加效果" : null;
                     host.Invalidate();
                 },
-                delegate { wantOnboard = true; }))
+                delegate { wantOnboard = true; },
+                new Action(ApplyHotkey)))
             {
                 dlg.ShowDialog();
             }
@@ -714,7 +806,7 @@ namespace DeadBand
 
             if (profile == null) return;
 
-            if (isPresent && host.IsSuspended)
+            if (isPresent && host.IsSuspended && !hiddenByUser)
             {
                 // 显示器回来了：重新贴边
                 profile.ScreenWidth = Screen.PrimaryScreen.Bounds.Width;

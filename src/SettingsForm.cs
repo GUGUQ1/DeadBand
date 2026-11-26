@@ -20,6 +20,7 @@ namespace DeadBand
         private readonly Func<bool> getPreview;
         private readonly Action<bool> setPreview;
         private readonly Action onOnboard;
+        private readonly Action onHotkeyChanged;
         private readonly string feedUrl;
 
         private const int PadX = 18;
@@ -31,7 +32,7 @@ namespace DeadBand
                             Action changed, Action onCalibrate, Action onClock,
                             Action<int> onColor, Action onInstall, Action onOpenDir,
                             Func<bool> getPreview, Action<bool> setPreview,
-                            Action onOnboard)
+                            Action onOnboard, Action onHotkeyChanged)
         {
             this.p = profile;
             this.feedUrl = feedUrl == null ? "" : feedUrl;
@@ -44,6 +45,7 @@ namespace DeadBand
             this.getPreview = getPreview;
             this.setPreview = setPreview;
             this.onOnboard = onOnboard;
+            this.onHotkeyChanged = onHotkeyChanged;
 
             Text = "DeadBand 设置";
             FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -52,7 +54,7 @@ namespace DeadBand
             ShowInTaskbar = true;
             StartPosition = FormStartPosition.CenterScreen;
             TopMost = true;
-            ClientSize = new Size(680, 620);
+            ClientSize = new Size(680, 660);
             BuildUi();
         }
 
@@ -389,14 +391,8 @@ namespace DeadBand
                   IndexOf(fsIds, p.FullscreenMode, 0),
                   delegate(int i) { p.FullscreenMode = fsIds[i]; Fire(); });
 
-            y += 16;
-            Btn(pg, ref y, "打开配置目录", delegate
-            {
-                if (onOpenDir != null) onOpenDir();
-            });
-
             y += 14;
-            y = Hint(pg, y, "启动与引导");
+            y = Hint(pg, y, "启动、快捷键与引导");
 
             // 自启动的真实状态在注册表里，这里直接读它 —— 只在 ini 里记一份会和任务管理器打架
             bool autoOn = false;
@@ -412,14 +408,96 @@ namespace DeadBand
                 }
             });
 
-            Btn(pg, ref y, "重新运行首次设置引导…", delegate
+            BuildHotkeyRow(pg, ref y);
+
+            // 两个收尾入口并排放，省一行高度（不然这一页要滚动才看得全）
+            var bOpen = new Button();
+            bOpen.Text = "打开配置目录";
+            bOpen.Bounds = new Rectangle(PadX, y, 200, 30);
+            bOpen.Click += delegate { if (onOpenDir != null) onOpenDir(); };
+            pg.Controls.Add(bOpen);
+
+            var bOnboard = new Button();
+            bOnboard.Text = "重新运行首次设置引导…";
+            bOnboard.Bounds = new Rectangle(PadX + 212, y, 230, 30);
+            bOnboard.Click += delegate
             {
                 if (onOnboard == null) return;
                 // 先把这个窗口关掉：引导是模态的，叠着开会让用户以为点空了。
                 // 引导本身由 App 在 ShowDialog 返回之后启动。
                 Close();
                 onOnboard();
-            });
+            };
+            pg.Controls.Add(bOnboard);
+            y += 38;
+        }
+
+        // ---------------- 隐藏区带热键 ----------------
+        private Button btnHotkey;
+        private bool capturingHotkey;
+
+        private void BuildHotkeyRow(Control pg, ref int y)
+        {
+            var lab = new Label();
+            lab.Text = "隐藏区带热键";
+            lab.Bounds = new Rectangle(PadX, y + 6, LabelW, 20);
+            pg.Controls.Add(lab);
+
+            btnHotkey = new Button();
+            btnHotkey.Bounds = new Rectangle(PadX + LabelW, y, 200, 30);
+            btnHotkey.Click += delegate
+            {
+                capturingHotkey = true;
+                btnHotkey.Text = "按下组合键…（Esc 取消）";
+                btnHotkey.Focus();
+            };
+            btnHotkey.KeyDown += delegate(object sender, KeyEventArgs e)
+            {
+                if (!capturingHotkey) return;
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+
+                if (e.KeyCode == Keys.Escape)
+                {
+                    capturingHotkey = false;
+                    RefreshHotkeyButton();
+                    return;
+                }
+
+                string spec = Hotkey.FromKey(e.KeyCode, e.Modifiers);
+                if (spec.Length == 0) return;      // 只按了修饰键，继续等
+
+                AppOptions.Hotkey = spec;
+                AppOptions.Save();
+                capturingHotkey = false;
+                RefreshHotkeyButton();
+                if (onHotkeyChanged != null) onHotkeyChanged();
+            };
+            pg.Controls.Add(btnHotkey);
+
+            var clr = new Button();
+            clr.Text = "清除";
+            clr.Bounds = new Rectangle(PadX + LabelW + 208, y, 64, 30);
+            clr.Click += delegate
+            {
+                AppOptions.Hotkey = "";
+                AppOptions.Save();
+                capturingHotkey = false;
+                RefreshHotkeyButton();
+                if (onHotkeyChanged != null) onHotkeyChanged();
+            };
+            pg.Controls.Add(clr);
+
+            RefreshHotkeyButton();
+            y += 34;
+            y = Hint(pg, y, "点一下按钮，按下想要的组合键。必须是「修饰键 + 一个键」，别选会跟别的软件冲突的。");
+        }
+
+        private void RefreshHotkeyButton()
+        {
+            if (btnHotkey == null) return;
+            string spec = AppOptions.Hotkey;
+            btnHotkey.Text = string.IsNullOrEmpty(spec) ? "（未设置）" : spec;
         }
 
         private void Fire()
