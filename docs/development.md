@@ -1,5 +1,7 @@
 # 开发说明
 
+> **如果你是被派来改这个仓库的 AI**，先读根目录的 [AGENTS.md](../AGENTS.md)。那份记的是"不知道就会踩"的硬约束和踩坑记录，这份偏构建与结构。
+
 ## 编译
 
 不需要 Visual Studio，用的是 Windows 自带的 .NET Framework 编译器：
